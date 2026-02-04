@@ -256,21 +256,20 @@ def set_table_ref(ws: Worksheet, tbl: Table, min_row: int, max_row: int, min_col
     if len(tc_list) != width:
         raise RuntimeError(f"Table metadata columns={len(tc_list)} but width={width} for {tbl.ref}")
 
+# Ran this once to change a cell value. Now it acts as a security check to ensure the labels haven't been changed.
 def relabel_total_row_to_class_size(ws: Worksheet, label_col, min_row, max_row):
-    """Rename 'Total' → 'Class Size' if present."""
     for r in range(min_row, max_row + 1):
         v = ws.cell(row=r, column=label_col).value
         if isinstance(v, str) and v.strip().lower() == "total":
             ws.cell(row=r, column=label_col, value="Class Size")
             return r
-    # if already 'Class Size', return that row
     for r in range(min_row, max_row + 1):
         v = ws.cell(row=r, column=label_col).value
         if isinstance(v, str) and v.strip() == "Class Size":
             return r
-    # else, assume penultimate row is total
     return max_row - 1
 
+# Finds the row that holds the % Placed label
 def find_percent_row(ws: Worksheet, label_col, min_row, max_row):
     for r in range(min_row, max_row + 1):
         v = ws.cell(row=r, column=label_col).value
@@ -279,10 +278,12 @@ def find_percent_row(ws: Worksheet, label_col, min_row, max_row):
     # else, assume last row
     return max_row
 
+# If a cell doesn't have a value, put in a '-' character
 def write_dash(cell):
     cell.value = "-"
     cell.alignment = RIGHT_ALIGN
 
+# Converts each cell into an interager if it wasn't already
 def to_int(v):
     try:
         if v in (None, "", "-"):
@@ -291,20 +292,23 @@ def to_int(v):
     except (TypeError, ValueError):
         return 0
 
+# Calculate the placement percentage 
 def placement_percent(accepted: int, seeking: int, not_reported: int) -> float:
     denom = (accepted or 0) + (seeking or 0) + (not_reported or 0)
     if denom <= 0:
         return 0.0
     return round((accepted or 0) * 100.0 / denom, 2)
 
+# Format each percentage correctly
 def write_percent(cell, pct: float):
     cell.value = pct / 100.0
     cell.number_format = "0.00%"
 
 # =========================
-# TABLE UPDATERS (MRF/WH)
+# 4) EXCEL UPDATERS (MRF/WH)
 # =========================
 
+# Updates all of the Most Recent Friday tables
 def update_mrf_table(ws: Worksheet, tbl_name: str, sql_rows):
     """
     MRF: two columns total (Status | value). Overwrite the single data column with RUN_DATE_LABEL,
@@ -348,6 +352,7 @@ def update_mrf_table(ws: Worksheet, tbl_name: str, sql_rows):
     # totals + % placed for this column
     compute_totals_and_percent(ws, min_row, max_row, min_col, data_cols[-1])
 
+# Updates each of the Weekly History tables
 def update_wh_table(ws: Worksheet, tbl_name: str, sql_rows):
     """
     WH: append a new column at the right, label it RUN_DATE_LABEL, fill,
@@ -392,6 +397,7 @@ def update_wh_table(ws: Worksheet, tbl_name: str, sql_rows):
     # totals + % placed for newest column
     compute_totals_and_percent(ws, min_row, max_row, min_col, newest_col)
 
+# Calculates the special fields, such as % Placed and Class Size
 def compute_totals_and_percent(ws: Worksheet, min_row: int, max_row: int, min_col: int, col: int):
     """
     Total = sum of numeric rows (exclude 'Class Size' and '% Placed')
@@ -428,10 +434,7 @@ def compute_totals_and_percent(ws: Worksheet, min_row: int, max_row: int, min_co
     pct = placement_percent(acc, seek, nr)
     write_percent(ws.cell(row=pct_row, column=col), pct)
 
-# =========================
-# SHEET UPDATER
-# =========================
-
+# Updates the correct sheet with the correct information
 def update_sheet_with_ft_int(ws: Worksheet, table_tuple, ft_rows, int_rows):
     """
     Update 4 tables on a sheet:
@@ -446,6 +449,7 @@ def update_sheet_with_ft_int(ws: Worksheet, table_tuple, ft_rows, int_rows):
     update_mrf_table(ws, t3, int_rows)
     update_wh_table(ws, t4, int_rows)
 
+# Special update case for the BSFin program
 def update_bsfin_with_ft_int(ws: Worksheet, table_tuple, ft_rows, int_2027_rows, int_2028_rows):
     """
     Update 4 tables on a sheet:
@@ -463,7 +467,7 @@ def update_bsfin_with_ft_int(ws: Worksheet, table_tuple, ft_rows, int_2027_rows,
     update_wh_table(ws, t6, int_2028_rows)
 
 # =========================
-# MAIN
+# MAIN: Connect to DB -> Query DB -> Access Workbook -> Update Tables
 # =========================
 
 def main(programs):
